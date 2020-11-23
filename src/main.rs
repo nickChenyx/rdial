@@ -1,5 +1,6 @@
 //! 端口扫描工具
 //! ulimit -n 限制会影响端口扫描的准确性，请确保扫描的端口范围大小在限制大小内。
+//! 例如：connect 127.0.0.1:1959 err: Too many open files (os error 24)
 //! @author: nickChenyx
 
 #[macro_use]
@@ -11,6 +12,7 @@ use std::time::Duration;
 use crossbeam::sync::WaitGroup;
 use std::sync::{Arc, Mutex};
 use structopt::StructOpt;
+use std::io;
 
 
 #[derive(Debug, StructOpt)]
@@ -72,12 +74,21 @@ fn is_open(hostname: String, port: u16, timeout: Duration) -> bool {
     // todo 这里为什么是这样呢
     // if let Ok(stream) = TcpStream::connect_timeout(&addrs[0], timeout) {
     let stream = TcpStream::connect_timeout(&addrs[0], timeout);
+
     if stream.is_ok() {
         // println!("server {} port {} open...", hostname, port);
         stream.unwrap().shutdown(Shutdown::Both).expect("shutdown tcp stream fail");
         return true;
     } else {
         // println!("server {} port {} close or timeout...", hostname, port);
-        return false;
+        let err = stream.unwrap_err();
+        match err.kind() {
+            io::ErrorKind::ConnectionRefused => return false,
+            io::ErrorKind::TimedOut => return false,
+            _ => {
+                println!("connect {} err: {}", &addrs[0], err);
+                return false;
+            },
+        }
     }
 }
